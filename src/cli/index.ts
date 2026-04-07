@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { registerConnect } from './connect.js';
 import { registerDisconnect } from './disconnect.js';
 import { registerStatus } from './status.js';
+import { registerPopulate } from './populate.js';
 
 const program = new Command();
 
@@ -15,5 +16,6 @@ program
 registerConnect(program);
 registerDisconnect(program);
 registerStatus(program);
+registerPopulate(program);
 
 program.parse();

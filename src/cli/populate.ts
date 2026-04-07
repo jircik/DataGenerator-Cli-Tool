@@ -1,0 +1,93 @@
+import { Command } from 'commander';
+import ora from 'ora';
+import { loadConfig } from '../core/config.js';
+import { parseSchemaFile } from '../core/schema-parser.js';
+import { generateRecords } from '../core/generator.js';
+import { PostgresDriver } from '../drivers/postgres.driver.js';
+import { MongoDriver } from '../drivers/mongo.driver.js';
+import * as logger from '../utils/logger.js';
+
+export function registerPopulate(program: Command): void {
+  program
+    .command('populate [source]')
+    .description('Populate a database table with fake data')
+    .option('--count <n>', 'number of records to generate', '10')
+    .option('--table <name>', 'target table/collection (required for inline mode)')
+    .option('--field <spec>', 'inline field definition (repeatable)', collect, [])
+    .option('--dry-run', 'print generated records without inserting')
+    .action(async (source: string | undefined, options: {
+      count: string;
+      table?: string;
+      field: string[];
+      dryRun?: boolean;
+    }) => {
+      const count = parseInt(options.count, 10);
+
+      // ── Detect mode ────────────────────────────────────────────────────────
+      const isFileMode = source != null && (source.endsWith('.yaml') || source.endsWith('.json'));
+      const isFolderMode = source != null && !isFileMode;
+      const isInlineMode = source == null && options.table != null && options.field.length > 0;
+
+      if (isFolderMode) {
+        logger.warn('Folder mode is not implemented yet. Coming in Task 11.');
+        return;
+      }
+
+      if (!isFileMode && !isInlineMode) {
+        logger.error('Provide a schema file, or use --table and --field for inline mode.');
+        process.exit(1);
+      }
+
+      // ── Load config ─────────────────────────────────────────────────────────
+      const config = loadConfig();
+      if (!config) {
+        logger.error('No active connection. Run `datagen connect` first.');
+        process.exit(1);
+      }
+
+      // ── Parse schema ────────────────────────────────────────────────────────
+      let schema;
+      try {
+        if (isFileMode) {
+          schema = parseSchemaFile(source!);
+        } else {
+          // Inline mode — implemented in Task 8
+          logger.warn('Inline mode is not implemented yet. Coming in Task 8.');
+          return;
+        }
+      } catch (e) {
+        logger.error(`Schema error: ${(e as Error).message}`);
+        process.exit(1);
+      }
+
+      // ── Generate records ────────────────────────────────────────────────────
+      const records = generateRecords(schema, count);
+
+      if (options.dryRun) {
+        logger.info(`Generated ${count} records for "${schema.table}" (dry run — nothing inserted)`);
+        console.log(JSON.stringify(records, null, 2));
+        return;
+      }
+
+      // ── Insert ──────────────────────────────────────────────────────────────
+      const driver = config.dbType === 'postgres'
+        ? new PostgresDriver(config.connectionString)
+        : new MongoDriver(config.connectionString);
+
+      const spinner = ora(`Inserting ${count} records into "${schema.table}"...`).start();
+      try {
+        await driver.connect();
+        await driver.insert(schema.table, records);
+        await driver.disconnect();
+        spinner.succeed(`Inserted ${count} records into "${schema.table}".`);
+      } catch (e) {
+        spinner.fail('Insert failed.');
+        logger.error((e as Error).message);
+        process.exit(1);
+      }
+    });
+}
+
+function collect(val: string, prev: string[]): string[] {
+  return [...prev, val];
+}
