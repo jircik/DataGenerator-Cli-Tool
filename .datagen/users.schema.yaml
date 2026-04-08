@@ -1,0 +1,15 @@
+target: postgres
+table: users
+fields:
+  id:
+    type: string.uuid
+    primary: true
+  name: person.fullName
+  email: internet.email
+  age:
+    type: number.int
+    min: 18
+    max: 80
+  active:
+    type: datatype.boolean
+  created_at: date.past
