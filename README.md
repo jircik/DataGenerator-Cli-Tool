@@ -79,15 +79,32 @@ datagen status
 
 ---
 
-### `datagen populate <schema_file>`
+### `datagen populate`
 
-Reads a schema file, generates fake records, and inserts them into the connected database.
+The core command. Supports four modes.
 
+**File mode** — populate from a schema file:
 ```bash
 datagen populate .datagen/users.schema.yaml --count 100
+```
 
-# Preview without inserting
-datagen populate .datagen/users.schema.yaml --count 10 --dry-run
+**Folder mode** — populate all schemas in a directory, resolving dependency order automatically:
+```bash
+datagen populate .datagen/ --count 50
+```
+
+**Inline mode** — define fields directly, no schema file needed:
+```bash
+datagen populate --table users \
+  --field "name:person.fullName" \
+  --field "email:internet.email" \
+  --field "age:number.int:min=18:max=80" \
+  --count 50
+```
+
+**Override mode** — use a schema file as base and override specific fields inline:
+```bash
+datagen populate .datagen/users.schema.yaml --field "email:internet.url" --count 20
 ```
 
 **Flags**
@@ -95,7 +112,44 @@ datagen populate .datagen/users.schema.yaml --count 10 --dry-run
 | Flag | Description | Default |
 |---|---|---|
 | `--count <n>` | Number of records to generate | `10` |
+| `--table <name>` | Target table/collection (required for inline mode) | — |
+| `--field <spec>` | Inline field definition, repeatable | — |
 | `--dry-run` | Print records to stdout, skip insert | — |
+
+---
+
+### `datagen schema validate <file>`
+
+Validates a schema file and reports any errors.
+
+```bash
+datagen schema validate .datagen/users.schema.yaml
+# ✔ Valid schema: "users" (6 fields)
+```
+
+---
+
+### `datagen schema list`
+
+Lists all schema files in the current `.datagen/` folder.
+
+```bash
+datagen schema list
+# ℹ .datagen/users.schema.yaml
+# ℹ .datagen/posts.schema.yaml
+```
+
+---
+
+### `datagen list tables`
+
+Lists all tables (Postgres) or collections (MongoDB) in the connected database.
+
+```bash
+datagen list tables
+# ℹ users
+# ℹ posts
+```
 
 ---
 
@@ -124,7 +178,33 @@ fields:
   created_at: date.past
 ```
 
-### MongoDB
+### Relation fields (PostgreSQL)
+
+When a field has `type: relation`, datagen fetches real IDs from the referenced table before inserting.
+
+```yaml
+# .datagen/posts.schema.yaml
+target: postgres
+table: posts
+fields:
+  id:
+    type: string.uuid
+    primary: true
+  title: lorem.sentence
+  body: lorem.paragraphs
+  user_id:
+    type: relation
+    table: users
+    field: id
+    strategy: random   # or: sequential
+```
+
+| Strategy | Behavior |
+|---|---|
+| `random` | Picks a random existing ID for each row |
+| `sequential` | Distributes IDs evenly across generated rows |
+
+### MongoDB — nested objects and arrays
 
 ```yaml
 # .datagen/orders.schema.yaml
@@ -139,6 +219,30 @@ fields:
     min: 10
     max: 9999
     precision: 2
+  data:
+    type: object
+    fields:
+      address: location.streetAddress
+      city: location.city
+      coordinates:
+        type: object
+        fields:
+          lat: location.latitude
+          lng: location.longitude
+  tags:
+    type: array
+    items: commerce.productAdjective
+    length: 3
+  history:
+    type: array
+    length: 5
+    items:
+      type: object
+      fields:
+        event:
+          type: helpers.arrayElement
+          values: ['created', 'updated', 'shipped']
+        timestamp: date.past
 ```
 
 Fields can be written as a **shorthand string** (`name: person.fullName`) or as an **object** with options (`type`, `min`, `max`, etc.).
@@ -171,6 +275,19 @@ All types map directly to [Faker.js](https://fakerjs.dev/api/) methods using the
 | `commerce.productName` | `"Awesome Chair"` |
 | `helpers.arrayElement` + `values` | one of the array |
 
+**MongoDB-only types:**
+
+| Type | Description |
+|---|---|
+| `type: object` + `fields` | Nested document |
+| `type: array` + `items` + `length` | Array of primitives or nested objects |
+
+**Postgres-only types:**
+
+| Type | Description |
+|---|---|
+| `type: relation` | Foreign key — fetches real IDs from the referenced table |
+
 ---
 
 ## Stack
@@ -192,21 +309,20 @@ All types map directly to [Faker.js](https://fakerjs.dev/api/) methods using the
 
 ```
 src/
-├── cli/          # Commands (connect, disconnect, status, populate)
-├── core/         # Config, schema parser, generator
+├── cli/          # Commands (connect, disconnect, status, populate, schema, list)
+├── core/         # Config, schema parser, generator, schema resolver
 ├── drivers/      # Postgres and MongoDB drivers
 └── utils/        # Logger, validator
-.datagen/         # Your schema files
+.datagen/         # Your schema files (commit these)
 ```
 
 ---
 
-## Future functionalities
+## Future Ideas
 
-- [ ] Inline field mode (`--table users --field "name:person.fullName"`)
-- [ ] Relation fields (foreign key support for Postgres)
-- [ ] Folder mode (populate all schemas in `.datagen/` in dependency order)
-- [ ] MongoDB nested objects and arrays
-- [ ] `--seed` flag for reproducible output
-- [ ] `datagen schema validate` and `datagen schema list`
-- [ ] `datagen list tables`
+- `--seed <n>` flag for reproducible output
+- `datagen export` — generate data to CSV/JSON without a database
+- `datagen reset <table>` — truncate and re-populate
+- Many-to-many relation support
+- `--locale` flag for Faker.js locale (`pt_BR`, `en_US`, etc.)
+- Schema inference from existing table (`datagen schema infer users`)
