@@ -1,0 +1,36 @@
+target: mongo
+collection: orders
+fields:
+  status:
+    type: helpers.arrayElement
+    values: ['pending', 'paid', 'shipped', 'cancelled']
+  amount:
+    type: number.float
+    min: 10
+    max: 9999
+    precision: 2
+  data:
+    type: object
+    fields:
+      address: location.streetAddress
+      city: location.city
+      zipcode: location.zipCode
+      coordinates:
+        type: object
+        fields:
+          lat: location.latitude
+          lng: location.longitude
+  tags:
+    type: array
+    items: commerce.productAdjective
+    length: 3
+  history:
+    type: array
+    length: 5
+    items:
+      type: object
+      fields:
+        event:
+          type: helpers.arrayElement
+          values: ['created', 'updated', 'shipped']
+        timestamp: date.past
