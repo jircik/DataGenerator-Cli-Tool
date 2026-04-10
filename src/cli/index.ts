@@ -5,6 +5,8 @@ import { registerConnect } from './connect.js';
 import { registerDisconnect } from './disconnect.js';
 import { registerStatus } from './status.js';
 import { registerPopulate } from './populate.js';
+import { registerSchema } from './schema.js';
+import { registerList } from './list.js';
 
 const program = new Command();
 
@@ -17,5 +19,7 @@ registerConnect(program);
 registerDisconnect(program);
 registerStatus(program);
 registerPopulate(program);
+registerSchema(program);
+registerList(program);
 
 program.parse();
