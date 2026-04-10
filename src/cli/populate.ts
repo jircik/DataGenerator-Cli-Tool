@@ -3,10 +3,11 @@ import ora from 'ora';
 import { loadConfig } from '../core/config.js';
 import { parseSchemaFile, parseInlineFields } from '../core/schema-parser.js';
 import { generateRecords } from '../core/generator.js';
+import { discoverSchemas, resolveOrder } from '../core/schema-resolver.js';
 import { PostgresDriver } from '../drivers/postgres.driver.js';
 import { MongoDriver } from '../drivers/mongo.driver.js';
 import type { Driver } from '../drivers/base.driver.js';
-import type { RelationFieldDef } from '../core/schema-parser.js';
+import type { ParsedSchema, RelationFieldDef } from '../core/schema-parser.js';
 import * as logger from '../utils/logger.js';
 
 export function registerPopulate(program: Command): void {
@@ -32,7 +33,69 @@ export function registerPopulate(program: Command): void {
       const isOverrideMode = isFileMode && options.field.length > 0;
 
       if (isFolderMode) {
-        logger.warn('Folder mode is not implemented yet. Coming in Task 11.');
+        const config = loadConfig();
+        if (!config) {
+          logger.error('No active connection. Run `datagen connect` first.');
+          process.exit(1);
+        }
+
+        let schemas: ParsedSchema[];
+        try {
+          const all = discoverSchemas(source!).filter((s) => s.target === config.dbType);
+          schemas = resolveOrder(all);
+        } catch (e) {
+          logger.error((e as Error).message);
+          process.exit(1);
+        }
+
+        if (schemas.length === 0) {
+          logger.warn(`No schema files found in "${source}".`);
+          return;
+        }
+
+        const driver: Driver = config.dbType === 'postgres'
+          ? new PostgresDriver(config.connectionString)
+          : new MongoDriver(config.connectionString);
+
+        try {
+          await driver.connect();
+        } catch (e) {
+          logger.error(`Connection failed: ${(e as Error).message}`);
+          process.exit(1);
+        }
+
+        for (let i = 0; i < schemas.length; i++) {
+          const schema = schemas[i];
+          const spinner = ora(`Populating "${schema.table}" (${i + 1}/${schemas.length})...`).start();
+
+          try {
+            const relationFields = Object.entries(schema.fields).filter(
+              ([, def]) => typeof def === 'object' && (def as RelationFieldDef).type === 'relation'
+            ) as [string, RelationFieldDef][];
+
+            const relationIds: Record<string, unknown[]> = {};
+            for (const [fieldName, def] of relationFields) {
+              const ids = await driver.fetchIds(def.table, def.field);
+              if (ids.length === 0) {
+                spinner.fail(`"${def.table}" is empty. Cannot populate "${schema.table}".`);
+                await driver.disconnect();
+                process.exit(1);
+              }
+              relationIds[fieldName] = ids;
+            }
+
+            const records = generateRecords(schema, count, relationIds);
+            await driver.insert(schema.table, records);
+            spinner.succeed(`Populated "${schema.table}" with ${count} records (${i + 1}/${schemas.length}).`);
+          } catch (e) {
+            spinner.fail(`Failed to populate "${schema.table}".`);
+            logger.error((e as Error).message);
+            await driver.disconnect();
+            process.exit(1);
+          }
+        }
+
+        await driver.disconnect();
         return;
       }
 
