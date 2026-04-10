@@ -12,7 +12,7 @@ Stop writing seed scripts by hand. Define your schema once and generate hundreds
 
 ```bash
 # Clone and install dependencies
-git clone https://github.com/yourname/datagen.git
+git clone https://github.com/jircik/DataGenerator-Cli-Tool.git
 cd datagen
 npm install
 

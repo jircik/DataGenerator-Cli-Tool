@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import ora from 'ora';
 import { loadConfig } from '../core/config.js';
-import { parseSchemaFile } from '../core/schema-parser.js';
+import { parseSchemaFile, parseInlineFields } from '../core/schema-parser.js';
 import { generateRecords } from '../core/generator.js';
 import { PostgresDriver } from '../drivers/postgres.driver.js';
 import { MongoDriver } from '../drivers/mongo.driver.js';
@@ -27,6 +27,7 @@ export function registerPopulate(program: Command): void {
       const isFileMode = source != null && (source.endsWith('.yaml') || source.endsWith('.json'));
       const isFolderMode = source != null && !isFileMode;
       const isInlineMode = source == null && options.table != null && options.field.length > 0;
+      const isOverrideMode = isFileMode && options.field.length > 0;
 
       if (isFolderMode) {
         logger.warn('Folder mode is not implemented yet. Coming in Task 11.');
@@ -50,10 +51,13 @@ export function registerPopulate(program: Command): void {
       try {
         if (isFileMode) {
           schema = parseSchemaFile(source!);
+          if (isOverrideMode) {
+            const overrides = parseInlineFields(options.field, schema.table, schema.target);
+            schema = { ...schema, fields: { ...schema.fields, ...overrides.fields } };
+          }
         } else {
-          // Inline mode — implemented in Task 8
-          logger.warn('Inline mode is not implemented yet. Coming in Task 8.');
-          return;
+          // Inline mode
+          schema = parseInlineFields(options.field, options.table!, config.dbType);
         }
       } catch (e) {
         logger.error(`Schema error: ${(e as Error).message}`);
