@@ -1,0 +1,13 @@
+target: postgres
+table: posts
+fields:
+  id:
+    type: string.uuid
+    primary: true
+  title: lorem.sentence
+  body: lorem.paragraphs
+  user_id:
+    type: relation
+    table: users
+    field: id
+    strategy: random

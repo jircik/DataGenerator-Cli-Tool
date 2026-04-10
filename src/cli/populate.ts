@@ -5,6 +5,8 @@ import { parseSchemaFile, parseInlineFields } from '../core/schema-parser.js';
 import { generateRecords } from '../core/generator.js';
 import { PostgresDriver } from '../drivers/postgres.driver.js';
 import { MongoDriver } from '../drivers/mongo.driver.js';
+import type { Driver } from '../drivers/base.driver.js';
+import type { RelationFieldDef } from '../core/schema-parser.js';
 import * as logger from '../utils/logger.js';
 
 export function registerPopulate(program: Command): void {
@@ -64,23 +66,59 @@ export function registerPopulate(program: Command): void {
         process.exit(1);
       }
 
+      // ── Resolve relation fields ─────────────────────────────────────────────
+      const relationFields = Object.entries(schema.fields).filter(
+        ([, def]) => typeof def === 'object' && (def as RelationFieldDef).type === 'relation'
+      ) as [string, RelationFieldDef][];
+
+      const relationIds: Record<string, unknown[]> = {};
+      let driver: Driver | null = null;
+
+      if (relationFields.length > 0) {
+        driver = config.dbType === 'postgres'
+          ? new PostgresDriver(config.connectionString)
+          : new MongoDriver(config.connectionString);
+
+        try {
+          await driver.connect();
+        } catch (e) {
+          logger.error(`Connection failed: ${(e as Error).message}`);
+          process.exit(1);
+        }
+
+        for (const [fieldName, def] of relationFields) {
+          const ids = await driver.fetchIds(def.table, def.field);
+          if (ids.length === 0) {
+            await driver.disconnect();
+            logger.error(
+              `Table "${def.table}" is empty. Populate it before inserting into "${schema.table}".`
+            );
+            process.exit(1);
+          }
+          relationIds[fieldName] = ids;
+        }
+      }
+
       // ── Generate records ────────────────────────────────────────────────────
-      const records = generateRecords(schema, count);
+      const records = generateRecords(schema, count, relationIds);
 
       if (options.dryRun) {
+        if (driver) await driver.disconnect();
         logger.info(`Generated ${count} records for "${schema.table}" (dry run — nothing inserted)`);
         console.log(JSON.stringify(records, null, 2));
         return;
       }
 
       // ── Insert ──────────────────────────────────────────────────────────────
-      const driver = config.dbType === 'postgres'
-        ? new PostgresDriver(config.connectionString)
-        : new MongoDriver(config.connectionString);
+      if (!driver) {
+        driver = config.dbType === 'postgres'
+          ? new PostgresDriver(config.connectionString)
+          : new MongoDriver(config.connectionString);
+      }
 
       const spinner = ora(`Inserting ${count} records into "${schema.table}"...`).start();
       try {
-        await driver.connect();
+        if (relationFields.length === 0) await driver.connect();
         await driver.insert(schema.table, records);
         await driver.disconnect();
         spinner.succeed(`Inserted ${count} records into "${schema.table}".`);

@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import type { ParsedSchema, FieldDef, FakerFieldDef, ObjectFieldDef, ArrayFieldDef } from './schema-parser.js';
+import type { ParsedSchema, FieldDef, FakerFieldDef, ObjectFieldDef, ArrayFieldDef, RelationFieldDef } from './schema-parser.js';
 
 export function generateValue(fieldDef: FieldDef): unknown {
   // Simple string shorthand: "person.fullName"
@@ -64,14 +64,30 @@ function callFaker(type: string, opts: Record<string, unknown>): unknown {
   return fn.call((faker as any)[namespace], cleanOpts);
 }
 
-export function generateRecord(schema: ParsedSchema): Record<string, unknown> {
+export function generateRecord(
+  schema: ParsedSchema,
+  relationIds: Record<string, unknown[]> = {},
+  index: number = 0,
+): Record<string, unknown> {
   const record: Record<string, unknown> = {};
   for (const [name, fieldDef] of Object.entries(schema.fields)) {
-    record[name] = generateValue(fieldDef);
+    if (typeof fieldDef === 'object' && (fieldDef as RelationFieldDef).type === 'relation') {
+      const def = fieldDef as RelationFieldDef;
+      const ids = relationIds[name];
+      record[name] = def.strategy === 'sequential'
+        ? ids[index % ids.length]
+        : ids[Math.floor(Math.random() * ids.length)];
+    } else {
+      record[name] = generateValue(fieldDef);
+    }
   }
   return record;
 }
 
-export function generateRecords(schema: ParsedSchema, count: number): Record<string, unknown>[] {
-  return Array.from({ length: count }, () => generateRecord(schema));
+export function generateRecords(
+  schema: ParsedSchema,
+  count: number,
+  relationIds: Record<string, unknown[]> = {},
+): Record<string, unknown>[] {
+  return Array.from({ length: count }, (_, i) => generateRecord(schema, relationIds, i));
 }
