@@ -1,6 +1,6 @@
 {
-  "name": "datagen",
-  "version": "1.0.0",
+  "name": "@jircik/datagen",
+  "version": "1.0.1",
   "main": "index.js",
   "type": "module",
   "bin": {
@@ -12,12 +12,22 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx src/cli/index.ts",
-    "build": "tsc"
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/cli/index.js', 0o755)\""
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["datagen", "faker", "seed", "database", "postgres", "mongodb", "cli", "fake-data"],
+  "author": "jircik",
   "license": "ISC",
-  "description": "",
+  "description": "CLI tool to populate PostgreSQL and MongoDB databases with realistic fake data",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jircik/DataGen-Cli-Tool.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "@faker-js/faker": "^10.4.0",
     "chalk": "^5.6.2",

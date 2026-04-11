@@ -4,6 +4,9 @@ A CLI tool for developers to populate PostgreSQL and MongoDB databases with real
 
 Stop writing seed scripts by hand. Define your schema once and generate hundreds of rows in seconds.
 
+> **Claude Code plugin available** — use Claude to set up schemas, populate tables, and manage datagen from any project.
+> Install it from [Datagen-Claude-Plugin](https://github.com/jircik/DataGen-Claude-Plugin).
+
 ---
 
 ## Installation
@@ -11,8 +14,19 @@ Stop writing seed scripts by hand. Define your schema once and generate hundreds
 **Requires Node.js 18+**
 
 ```bash
-# Clone and install dependencies
-git clone https://github.com/jircik/DataGenerator-Cli-Tool.git
+npm install -g @jircik/datagen
+```
+
+Verify it works:
+
+```bash
+datagen --help
+```
+
+### Contributing / running from source
+
+```bash
+git clone https://github.com/jircik/DataGen-Cli-Tool.git
 cd datagen
 npm install
 
@@ -20,9 +34,7 @@ npm install
 npx tsx src/cli/index.ts --help
 
 # Or link globally
-npm run build
-npm link
-datagen --help
+npm run build && npm link
 ```
 
 ---
@@ -326,3 +338,4 @@ src/
 - Many-to-many relation support
 - `--locale` flag for Faker.js locale (`pt_BR`, `en_US`, etc.)
 - Schema inference from existing table (`datagen schema infer users`)
+- Multi-database support — extend driver compatibility beyond PostgreSQL and MongoDB to include MySQL, SQLite, and other popular databases.
